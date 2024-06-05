@@ -12,10 +12,10 @@
 #define DRIVER_MAJOR 63
 #define FIFO_SIZE 1024
 //#define min(a, b) ((a) < (b) ? (a) : (b))
-struct mutex my_mutex;
-char FIFO[FIFO_SIZE];
-int charNum = 0;
-enum testdevice_state state = TESTDEVICE_STATE_ENABLE;
+static struct mutex my_mutex;
+static char FIFO[FIFO_SIZE];
+static int charNum = 0;
+static enum testdevice_state state = TESTDEVICE_STATE_ENABLE;
 static int myDeviceOpen(struct inode *inode, struct file *file)
 {
 	if (!mutex_trylock(&my_mutex)) {
@@ -37,7 +37,7 @@ static ssize_t myDeviceRead(struct file *file, char __user *buffer,
 			    size_t length, loff_t *offset)
 {
 	printk("Reading from device\n");
-
+	printk("charNum = %d\n", charNum);
 	if (state == TESTDEVICE_STATE_DISABLE) {
 		printk("Device is disabled\n");
 		return -EIO;
@@ -92,18 +92,22 @@ static ssize_t myDeviceWrite(struct file *file, const char __user *buffer,
 	int t = copy_from_user(kbuf, buffer, (unsigned long int)length);
 	if (t != 0) {
 		printk("Error in copy_from_user\n");
-		return -EFAULT;
+		//return -EFAULT;
 	}
-	kbuf[length - t] = '\0';
+	length = length - t;
+	kbuf[length] = '\0';
+	printk("Writing to device: %s\n", kbuf);
+
 	if (charNum + length + 1 > FIFO_SIZE) {
 		printk("FIFO is full\n");
 		return -ENOSPC;
 	}
 	for (int i = 0; i < length; i++) {
-		FIFO[charNum + i + 1] = kbuf[i];
+		FIFO[charNum + i] = kbuf[i];
 	}
 	charNum = charNum + length;
 	FIFO[charNum + 1] = '\0';
+	printk("FIFO: %s\n", FIFO);
 	return length - t;
 }
 
@@ -145,6 +149,11 @@ static long mydevice_ioctl(struct file *filp, unsigned int cmd,
 			return -EFAULT;
 		}
 		break;
+	case TESTDEVICE_FIFO_CLEAN:
+		printk("TESTDEVICE_FIFO_CLEAN\n");
+		charNum = 0;
+		FIFO[0] = '\0';
+		break;
 	default:
 		printk(KERN_WARNING "unsupported command %d\n", cmd);
 		return -EFAULT;
@@ -166,7 +175,7 @@ static int __init test_init(void)
 {
 	printk("Hello my module\n");
 	FIFO[0] = '\0';
-	FIFO[1023] = '\0';
+	FIFO[FIFO_SIZE - 1] = '\0';
 	mutex_init(&my_mutex);
 	register_chrdev(DRIVER_MAJOR, "myDevice", &s_myDeviceFops);
 	return 0;

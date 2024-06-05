@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../../workspace"
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"syscalls.h": "c",
+			"internal.h": "c",
+			"filelock.h": "c"
+		}
+	}
+}

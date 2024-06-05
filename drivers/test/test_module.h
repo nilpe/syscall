@@ -28,4 +28,6 @@ enum testdevice_state {
 
 #define TESTDEVICE_STATE_READ _IOR(MYDEVICE_IOC_TYPE, 4, enum testdevice_state)
 
+#define TESTDEVICE_FIFO_CLEAN _IOW(MYDEVICE_IOC_TYPE, 5, enum testdevice_state)
+
 #endif /* MY_DEVICE_DRIVER_H_ */

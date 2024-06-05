@@ -2,14 +2,14 @@
 
 SYSCALL_DEFINE1(new_syscall, int, x)
 {
-	printk("new_syscall added!!");
+	//printk("new_syscall added!!");
 	return x;
 }
 
 SYSCALL_DEFINE2(hash_char, const char __user *, filename, long int __user *,
 		value)
 {
-	printk("test");
+	//printk("test");
 	//int ok = access_ok(VERIFY_READ, filename, 1);
 	int rec_max = 255;
 	char *fn = kmalloc(rec_max, GFP_KERNEL);
@@ -17,7 +17,7 @@ SYSCALL_DEFINE2(hash_char, const char __user *, filename, long int __user *,
 	for (i = 0; i < rec_max; i++) {
 		int ok = copy_from_user(&fn[i], &filename[i], 1);
 		if (ok != 0) {
-			printk("copy_from_user failed");
+			//printk("copy_from_user failed");
 			return EFAULT;
 		}
 		if (fn[i] == '\0') {
