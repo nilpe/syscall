@@ -11,35 +11,36 @@
 #include "test_module.h"
 #define DRIVER_MAJOR 63
 #define FIFO_SIZE 1024
-//#define min(a, b) ((a) < (b) ? (a) : (b))
-static struct mutex my_mutex;
-static char FIFO[FIFO_SIZE];
+static struct mutex devMutex;
+static struct mutex rwMutex;
+static char FIFO[FIFO_SIZE + 1];
 static int charNum = 0;
 static enum testdevice_state state = TESTDEVICE_STATE_ENABLE;
-static int myDeviceOpen(struct inode *inode, struct file *file)
+static int myDevice_open(struct inode *inode, struct file *file)
 {
-	if (!mutex_trylock(&my_mutex)) {
-		printk("Device is busy\n");
+	if (!mutex_trylock(&devMutex)) {
+		pr_err("Device is busy\n");
 		return -EBUSY;
 	}
-	printk("Device has been opened\n");
+	pr_info("Device has been opened\n");
 
 	return 0;
 }
-static int myDeviceClose(struct inode *inode, struct file *file)
+static int myDevice_close(struct inode *inode, struct file *file)
 {
-	mutex_unlock(&my_mutex);
-	printk("Device has been closed\n");
+	mutex_unlock(&devMutex);
+	pr_info("Device has been closed\n");
 
 	return 0;
 }
-static ssize_t myDeviceRead(struct file *file, char __user *buffer,
-			    size_t length, loff_t *offset)
+static ssize_t mydevice_read(struct file *file, char __user *buffer,
+			     size_t length, loff_t *offset)
 {
-	printk("Reading from device\n");
-	printk("charNum = %d\n", charNum);
+	pr_info("Reading from device\n");
+	pr_debug("charNum = %d\n", charNum);
 	if (state == TESTDEVICE_STATE_DISABLE) {
-		printk("Device is disabled\n");
+		pr_err("Device is disabled\n");
+
 		return -EIO;
 	}
 
@@ -56,16 +57,17 @@ static ssize_t myDeviceRead(struct file *file, char __user *buffer,
 	}
 	char *kbuf = kmalloc(Num2Read, GFP_KERNEL);
 	if (kbuf == NULL) {
-		printk("Error in kmalloc\n");
+		pr_err("Error in kmalloc\n");
 		return -ENOMEM;
 	}
+	mutex_lock(&rwMutex);
+
 	for (int i = 0; i < Num2Read; i++) {
 		kbuf[i] = FIFO[i];
 	}
-	//kbuf[Num2Read] = '\0';
 	int t = copy_to_user(buffer, kbuf, Num2Read);
 	if (t != 0) {
-		printk("Error in copy_to_user\n");
+		pr_err("Error in copy_to_user\n");
 		Num2Read = Num2Read - t;
 	}
 	for (int i = 0; i < charNum - Num2Read; i++) {
@@ -75,39 +77,51 @@ static ssize_t myDeviceRead(struct file *file, char __user *buffer,
 		FIFO[i] = FIFO[i + Num2Read];
 	}
 	charNum = charNum - Num2Read;
+	mutex_unlock(&rwMutex);
+
+	kfree(kbuf);
 	return Num2Read;
 }
-static ssize_t myDeviceWrite(struct file *file, const char __user *buffer,
-			     size_t length, loff_t *offset)
+static ssize_t mydevice_write(struct file *file, const char __user *buffer,
+			      size_t length, loff_t *offset)
 {
+	length = umin(length, FIFO_SIZE - charNum);
 	if (state == TESTDEVICE_STATE_DISABLE) {
-		printk("Device is disabled\n");
+		pr_err("Device is disabled\n");
 		return -EIO;
 	}
 	char *kbuf = kmalloc(length + 1, GFP_KERNEL);
 	if (kbuf == NULL) {
-		printk("Error in kmalloc\n");
+		pr_err("Error in kmalloc\n");
 		return -ENOMEM;
 	}
 	int t = copy_from_user(kbuf, buffer, (unsigned long int)length);
 	if (t != 0) {
-		printk("Error in copy_from_user\n");
-		//return -EFAULT;
+		pr_err("Error in copy_from_user\n");
+		kfree(kbuf);
+		return -EFAULT;
 	}
 	length = length - t;
 	kbuf[length] = '\0';
-	printk("Writing to device: %s\n", kbuf);
+
+	pr_info("Writing to device: %s\n", kbuf);
+	mutex_lock(&rwMutex);
 
 	if (charNum + length + 1 > FIFO_SIZE) {
-		printk("FIFO is full\n");
+		pr_err("FIFO is full\n");
+		kfree(kbuf);
+		mutex_unlock(&rwMutex);
 		return -ENOSPC;
 	}
 	for (int i = 0; i < length; i++) {
 		FIFO[charNum + i] = kbuf[i];
 	}
 	charNum = charNum + length;
-	FIFO[charNum + 1] = '\0';
-	printk("FIFO: %s\n", FIFO);
+	FIFO[charNum] = '\0';
+	mutex_unlock(&rwMutex);
+
+	pr_info("FIFO: %s\n", FIFO);
+	kfree(kbuf);
 	return length - t;
 }
 
@@ -118,18 +132,18 @@ static struct mydevice_values stored_values;
 static long mydevice_ioctl(struct file *filp, unsigned int cmd,
 			   unsigned long arg)
 {
-	printk("mydevice_ioctl\n");
+	pr_info("mydevice_ioctl\n");
 
 	switch (cmd) {
 	case MYDEVICE_SET_VALUES:
-		printk("MYDEVICE_SET_VALUES\n");
+		pr_info("MYDEVICE_SET_VALUES\n");
 		if (copy_from_user(&stored_values, (void __user *)arg,
 				   sizeof(stored_values))) {
 			return -EFAULT;
 		}
 		break;
 	case MYDEVICE_GET_VALUES:
-		printk("MYDEVICE_GET_VALUES\n");
+		pr_info("MYDEVICE_GET_VALUES\n");
 		if (copy_to_user((void __user *)arg, &stored_values,
 				 sizeof(stored_values))) {
 			return -EFAULT;
@@ -137,25 +151,25 @@ static long mydevice_ioctl(struct file *filp, unsigned int cmd,
 		break;
 
 	case TESTDEVICE_STATE_WRITE:
-		printk("TESTDEVICE_STATE_WRITE\n");
+		pr_info("TESTDEVICE_STATE_WRITE\n");
 		if (copy_from_user(&state, (void __user *)arg, sizeof(state))) {
 			return -EFAULT;
 		}
 
 		break;
 	case TESTDEVICE_STATE_READ:
-		printk("TESTDEVICE_STATE_READ\n");
+		pr_info("TESTDEVICE_STATE_READ\n");
 		if (copy_to_user((void __user *)arg, &state, sizeof(state))) {
 			return -EFAULT;
 		}
 		break;
 	case TESTDEVICE_FIFO_CLEAN:
-		printk("TESTDEVICE_FIFO_CLEAN\n");
+		pr_info("TESTDEVICE_FIFO_CLEAN\n");
 		charNum = 0;
 		FIFO[0] = '\0';
 		break;
 	default:
-		printk(KERN_WARNING "unsupported command %d\n", cmd);
+		pr_err("unsupported command %d\n", cmd);
 		return -EFAULT;
 	}
 	return 0;
@@ -163,27 +177,33 @@ static long mydevice_ioctl(struct file *filp, unsigned int cmd,
 
 static struct file_operations s_myDeviceFops = {
 	.owner = THIS_MODULE,
-	.open = myDeviceOpen,
-	.release = myDeviceClose,
-	.read = myDeviceRead,
-	.write = myDeviceWrite,
+	.open = myDevice_open,
+	.release = myDevice_close,
+	.read = mydevice_read,
+	.write = mydevice_write,
 	.unlocked_ioctl = mydevice_ioctl,
 	.compat_ioctl = mydevice_ioctl, // for 32-bit App
 };
 
 static int __init test_init(void)
 {
-	printk("Hello my module\n");
+	pr_info("Hello my module\n");
 	FIFO[0] = '\0';
 	FIFO[FIFO_SIZE - 1] = '\0';
-	mutex_init(&my_mutex);
-	register_chrdev(DRIVER_MAJOR, "myDevice", &s_myDeviceFops);
-	return 0;
+	mutex_init(&devMutex);
+	mutex_init(&rwMutex);
+	int ok = register_chrdev(DRIVER_MAJOR, "myDevice", &s_myDeviceFops);
+	if (ok < 0) {
+		pr_err("register_chrdev failed\n");
+		mutex_destroy(&devMutex);
+		mutex_destroy(&rwMutex);
+	}
+	return ok;
 }
 
 static void __exit test_exit(void)
 {
-	printk("Bye bye my module\n");
+	pr_info("Bye bye my module\n");
 	unregister_chrdev(DRIVER_MAJOR, "myDevice");
 }
 

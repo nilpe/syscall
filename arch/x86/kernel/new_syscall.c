@@ -6,33 +6,34 @@ SYSCALL_DEFINE1(new_syscall, int, x)
 	return x;
 }
 
-SYSCALL_DEFINE2(hash_char, const char __user *, filename, long int __user *,
-		value)
+SYSCALL_DEFINE3(hash_char, const char __user *, filename, unsigned long int,
+		len, unsigned long int __user *, value)
 {
-	//printk("test");
-	//int ok = access_ok(VERIFY_READ, filename, 1);
-	int rec_max = 255;
+	unsigned int rec_max = 255 * sizeof(char);
 	char *fn = kmalloc(rec_max, GFP_KERNEL);
-	int i;
-	for (i = 0; i < rec_max; i++) {
-		int ok = copy_from_user(&fn[i], &filename[i], 1);
-		if (ok != 0) {
-			//printk("copy_from_user failed");
-			return EFAULT;
-		}
-		if (fn[i] == '\0') {
-			break;
-		}
+	if (fn == NULL) {
+		//printk("kcalloc failed");
+		return -ENOMEM;
 	}
+	int willCopyByte = (rec_max < len) ? rec_max : len * sizeof(char);
+	unsigned long ok = copy_from_user(fn, filename, willCopyByte);
+	if (ok != 0) {
+		//printk("copy_from_user failed");
+		//printk("copy_from_user failed, %ld\n", ok);
+		kfree(fn);
+		return -EFAULT;
+	}
+
 	long int hash = 0xcbf29ce484222325;
-	for (int j = 0; j < i; j++) {
+	for (int j = 0; j < willCopyByte; j++) {
 		hash = hash ^ fn[j];
 		hash = hash * 0x100000001b3;
 	}
-	int ok = copy_to_user(value, &hash, sizeof(long int));
+	ok = copy_to_user(value, &hash, sizeof(long int));
 	if (ok != 0) {
 		//printk("copy_to_user failed");
-		return EFAULT;
+		kfree(fn);
+		return -EFAULT;
 	}
 
 	return 0;

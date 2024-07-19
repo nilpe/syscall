@@ -898,9 +898,10 @@ asmlinkage long sys_kcmp(pid_t pid1, pid_t pid2, int type, unsigned long idx1,
 asmlinkage long sys_finit_module(int fd, const char __user *uargs, int flags);
 asmlinkage long sys_new_syscall(int count);
 asmlinkage long sys_hash_char(const char __user *filename,
-			     long int __user *value) ;
-				 asmlinkage long sys_sched_setattr(pid_t pid, struct sched_attr __user *attr,
-			       unsigned int flags);
+			      unsigned long int len,
+			      unsigned long int __user *value);
+asmlinkage long sys_sched_setattr(pid_t pid, struct sched_attr __user *attr,
+				  unsigned int flags);
 asmlinkage long sys_sched_getattr(pid_t pid, struct sched_attr __user *attr,
 				  unsigned int size, unsigned int flags);
 asmlinkage long sys_renameat2(int olddfd, const char __user *oldname,
