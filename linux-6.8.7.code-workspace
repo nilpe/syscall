@@ -9,9 +9,12 @@
 	],
 	"settings": {
 		"files.associations": {
+			"Jamfile": "plaintext",
 			"syscalls.h": "c",
 			"internal.h": "c",
-			"filelock.h": "c"
+			"filelock.h": "c",
+			"bug.h": "c",
+			"test_module.h": "c"
 		}
 	}
 }

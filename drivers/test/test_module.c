@@ -170,7 +170,7 @@ static long mydevice_ioctl(struct file *filp, unsigned int cmd,
 		break;
 	default:
 		pr_err("unsupported command %d\n", cmd);
-		return -EFAULT;
+		return -EINVAL;
 	}
 	return 0;
 }
